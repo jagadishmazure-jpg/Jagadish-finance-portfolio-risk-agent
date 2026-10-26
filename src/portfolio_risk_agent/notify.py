@@ -31,8 +31,10 @@ class EmailChannel:
         self.outbox: list[SentRecord] = []
 
     def send(self, recipient: str, subject: str, body: str) -> SentRecord:
-        if os.environ.get("CI", "").lower() in ("true", "1", "yes"):
-            raise RuntimeError("email sending is refused in CI")
+        # Dry-run first: it transmits nothing, so it must never raise,
+        # even when the runner sets CI. The opt-in check comes next so a
+        # caller that never opted in sees the opt-in error, and the CI
+        # refusal guards only the remaining case: an opted-in real send.
         record = SentRecord(recipient, subject, redact_pii(body), "dry_run")
         if self.dry_run:
             self.outbox.append(record)
@@ -40,6 +42,8 @@ class EmailChannel:
         if not self.allow_real_send:
             raise RuntimeError(
                 "refusing to queue email: pass allow_real_send=True explicitly to opt in")
+        if os.environ.get("CI", "").lower() in ("true", "1", "yes"):
+            raise RuntimeError("email sending is refused in CI")
         record = SentRecord(recipient, subject, redact_pii(body), "queued")
         self.outbox.append(record)
         return record

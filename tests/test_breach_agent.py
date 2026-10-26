@@ -143,10 +143,22 @@ def test_email_channel_requires_explicit_opt_in():
 
 
 def test_email_channel_refused_in_ci(monkeypatch):
+    # The meaningful CI case is an opted-in real send, not a dry run:
+    # a dry run transmits nothing, so it must not raise (see the
+    # dry-run-in-CI test below). CI must still refuse the real send.
     monkeypatch.setenv("CI", "true")
-    channel = EmailChannel(dry_run=True)
+    channel = EmailChannel(dry_run=False, allow_real_send=True)
     with pytest.raises(RuntimeError, match="refused in CI"):
         channel.send("risk@example.org", "Risk summary", "body")
+
+
+def test_email_dry_run_records_even_in_ci(monkeypatch):
+    # Regression: the runner sets CI, and a dry run must still return
+    # its record instead of raising, because it transmits nothing.
+    monkeypatch.setenv("CI", "true")
+    channel = EmailChannel()
+    record = channel.send("risk@example.org", "Risk summary", "body")
+    assert record.mode == "dry_run" and len(channel.outbox) == 1
 
 
 def test_email_channel_takes_no_credentials():
